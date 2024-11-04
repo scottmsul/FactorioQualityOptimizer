@@ -1,4 +1,4 @@
-/# Factorio Quality Optimizer
+# Factorio Quality Optimizer
 
 ## Background
 
