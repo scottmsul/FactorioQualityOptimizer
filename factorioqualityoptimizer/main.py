@@ -50,6 +50,7 @@ The last (legendary) production recipe is always prodded.
 '''
 import argparse
 import itertools
+import sys
 import numpy as np
 
 NUM_RECYCLING_MODULES = 4
@@ -316,25 +317,30 @@ class RecyclerSolver:
                 print(f'q{self.max_quality-self.num_extra_qualities+i+1} ingredient: {free_item_results[i*2]}')
                 print(f'q{self.max_quality-self.num_extra_qualities+i+1} output: {free_item_results[i*2+1]}')
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(
         prog='Factorio Quality Optimizer',
         description='This program optimizes prod/qual ratios in factories, and calculates outputs for a given input',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('-st', '--starting-type', type=str, default='ingredient', help='Starting item type. String that is either \'ingredient\' or \'product\'. Ignored if --no-recycling flag is set, as starting type must be ingredient. Default=\'ingredient\'.')
-    parser.add_argument('-et', '--ending-type', type=str, default='product', help='Ending item type. String that is either \'ingredient\' or \'product\'. Ignored if --no-recycling flag is set, as ending type must be product. Default=\'product\'.')
-    parser.add_argument('-pt', '--productivity-tier', type=int, default=3, help='Productivity module tier. Number from 1 to 3. Default=3')
-    parser.add_argument('-qt', '--quality-tier', type=int, default=3, help='Quality module tier. Number from 1 to 3. Default=3')
-    parser.add_argument('-q', '--module-quality', type=int, default=5, help='Quality of the modules in the assembler and recycler (if present). Number from 1 to 5. Default=5')
+    parser.add_argument('-st', '--starting-type', type=str, default='ingredient', help='Starting item type. String that is either \'ingredient\' or \'product\'. Ignored if --no-recycling flag is set, as starting type must be ingredient')
+    parser.add_argument('-et', '--ending-type', type=str, default='product', help='Ending item type. String that is either \'ingredient\' or \'product\'. Ignored if --no-recycling flag is set, as ending type must be product')
+    parser.add_argument('-pt', '--productivity-tier', type=int, default=3, help='Productivity module tier. Number from 1 to 3')
+    parser.add_argument('-qt', '--quality-tier', type=int, default=3, help='Quality module tier. Number from 1 to 3')
+    parser.add_argument('-q', '--module-quality', type=int, default=5, help='Quality of the modules in the assembler and recycler (if present). Number from 1 to 5')
     parser.add_argument('-sq', '--starting-quality', type=int, default=1, help='Starting quality ingredient. Number from 1 to 4. Default=1')
-    parser.add_argument('-eq', '--ending-quality', type=int, default=5, help='Ending quality to optimize. Number from 2 to 5. Must be greater than starting quality. Default=5')
-    parser.add_argument('-mq', '--max-quality', type=int, default=5, help='Max quality unlocked. Number from 3 to 5. Must be greater than or equal to ending quality. Default=5')
-    parser.add_argument('-r', '--enable-recycling', action='store_true', help='Enables recycling loops. Set this flag if you have unlocked the recycler. This flag is set by default.')
+    parser.add_argument('-eq', '--ending-quality', type=int, default=5, help='Ending quality to optimize. Number from 2 to 5. Must be greater than starting quality')
+    parser.add_argument('-mq', '--max-quality', type=int, default=5, help='Max quality unlocked. Number from 3 to 5. Must be greater than or equal to ending quality')
+    parser.add_argument('-r', '--enable-recycling', action='store_true', help='Enables recycling loops. Set this flag if you have unlocked the recycler')
     parser.add_argument('-nr', '--no-enable-recycling', dest='enable_recycling', action='store_false', help='Disables recycling loops. Set this flag if you have not unlocked the recycler.')
-    parser.add_argument('-ms', '--module-slots', type=int, default=4, help='number of module slots in the crafting building. Default=4')
-    parser.add_argument('-p', '--additional-prod', type=float, default=0, help='any extra prod bonus, either from the building or recipe research. Units are percent out of 100. For example if using the foundry, enter 50. Default=0')
+    parser.add_argument('-ms', '--module-slots', type=int, default=4, help='number of module slots in the crafting building')
+    parser.add_argument('-p', '--additional-prod', type=float, default=0, help='any extra prod bonus, either from the building or recipe research. Units are percent out of 100. For example if using the foundry, enter 50')
     parser.set_defaults(enable_recycling=True)
-    args = parser.parse_args()
+    
+    if len(sys.argv)==1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    args = parser.parse_args() 
 
     prod_module_bonus = PROD_BONUSES[args.productivity_tier-1][args.module_quality-1]
     quality_module_probability = QUALITY_PROBABILITIES[args.quality_tier-1][args.module_quality-1]
@@ -365,5 +371,7 @@ if __name__ == '__main__':
             module_slots=args.module_slots,
             additional_prod=args.additional_prod/100,
         )
-
     solver.run()
+    
+if __name__ == '__main__':
+    main()
