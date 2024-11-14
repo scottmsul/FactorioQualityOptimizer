@@ -316,9 +316,8 @@ class LinearSolver:
             quality_penalty_from_speed_modules = num_effective_speed_modules * self.quality_penalty_per_speed_module
 
             prod_bonus = num_prod_modules * self.prod_module_bonus + crafting_machine_prod_bonus
-            speed_factor = crafting_machine_speed * (1 + \
+            speed_factor = crafting_machine_speed * (1 + self.building_speed_bonus) * (1 + \
                     + (num_effective_speed_modules * self.speed_module_bonus) \
-                    + self.building_speed_bonus \
                     - (num_qual_modules * self.speed_penalty_per_quality_module) \
                     - (num_prod_modules * self.speed_penalty_per_prod_module) \
             )
