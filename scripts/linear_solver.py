@@ -357,6 +357,7 @@ class LinearSolver:
 
                     if result_item_data['allows_quality']:
                         quality_percent = num_qual_modules * self.quality_module_probability - num_effective_speed_modules * self.quality_penalty_per_speed_module
+                        quality_percent = max(quality_percent, 0)
                         quality_probability_factor = calculate_quality_probability_factor(recipe_quality, result_quality, self.max_quality_unlocked, quality_percent)
                     else:
                         quality_probability_factor = 1.0
