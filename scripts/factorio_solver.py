@@ -29,6 +29,18 @@ DEFAULT_RESOURCE_COST = 1.0
 DEFAULT_MODULE_COST = 1.0
 DEFAULT_BUILDING_COST = 1.0
 
+RESEARCH_PRODUCTIVITY_ITEM_RECIPE_MAP = {
+    'steel-plate': ['steel-plate', 'casting-steel'],
+    'low-density-structure': ['low-density-structure', 'casting-low-density-structure'],
+    'scrap': ['scrap-recycling'],
+    'processing-unit': ['processing-unit'],
+    'plastic-bar': ['plastic-bar'],
+    'rocket-fuel': ['rocket-fuel', 'rocket-fuel-from-jelly', 'ammonia-rocket-fuel'],
+    'asteroid': ['carbonic-asteroid-crushing', 'metallic-asteroid-crushing', 'oxide-asteroid-crushing', \
+                    'advanced-carbonic-asteroid-crushing', 'advanced-metallic-asteroid-crushing', 'advanced-oxide-asteroid-crushing']
+    # ignore rocket-parts, not currently supported
+}
+
 def setup_inputs(resource_cost, offshore_cost):
     inputs = []
     for planet in FACTORIO_DATA['planets']:
@@ -79,6 +91,16 @@ def parse_resources_list(items):
         inputs.append(input)
     return inputs
 
+def parse_productivity_research_list(items):
+    productivity_research = {}
+    for item in items:
+        item_key, item_prod_str = item.split('=')
+        recipe_keys = RESEARCH_PRODUCTIVITY_ITEM_RECIPE_MAP[item_key]
+        for recipe_key in recipe_keys:
+            item_prod = float(item_prod_str)
+            productivity_research[item_key] = item_prod
+    return productivity_research
+
 def main():
     codebase_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     default_config_path = os.path.join(codebase_path, 'examples', 'generic_linear_solver', 'one_step_example.json')
@@ -104,6 +126,7 @@ def main():
     parser.add_argument('-ii', '--input-items', metavar="", nargs='*', default=None, help='Custom input items to the solver. Should be phrased as item-1=cost-1 item-2=cost-2 ..., with no spaces around equals sign.')
     parser.add_argument('-iq', '--input-quality', default=DEFAULT_INPUT_QUALITY, help='Input quality to the solver. Only used if --input-items flag is set.')
     parser.add_argument('-ir', '--input-resources', metavar="", nargs='*', default=None, help='Custom input resources to the solver. Should be phrased as resource-1=cost-1 resource-2=cost-2 ..., with no spaces around equals sign. If not present, uses all resources on all planets. See data/space-age-2.0.11.json for resource keys.')
+    parser.add_argument('-pr', '--productivity-research', nargs='+', default=None, help=f'Productivity research. Should be phrased as item-1=prod-1, item-2=prod-2, ..., with no spaces around equals sign, using decimal units. For instance use "steel-plate=0.5" for steel plate productivity level 5. Available keys are {[k for k in RESEARCH_PRODUCTIVITY_ITEM_RECIPE_MAP.keys()]}')
     parser.add_argument('-ab', '--allow-byproducts', action='store_true', help='Allows any item besides specified inputs or outputs to exist as a byproduct in the solution. Equivalent to adding void recipes. If not present, byproducts are recycled.')
     parser.add_argument('-ar', '--allowed-recipes', nargs='+', default=None, help='Allowed recipes. Only one of {--allowed-recipes} or {--disallowed-recipes} can be used. See data/space-age-2.0.11.json for recipe keys.')
     parser.add_argument('-dr', '--disallowed-recipes', nargs='+', default=None, help='Disallowed recipes. Only one of {--allowed-recipes} or {--disallowed-recipes} can be used. See data/space-age-2.0.11.json for recipe keys.')
@@ -128,6 +151,8 @@ def main():
             input_resources = parse_resources_list(args.input_resources)
             inputs.extend(input_resources)
 
+    productivity_research = parse_productivity_research_list(args.productivity_research) if args.productivity_research else {}
+
     config = {
         "data": FACTORIO_DATA_FILENAME,
         "quality_module_tier": args.quality_module_tier,
@@ -139,6 +164,7 @@ def main():
         "speed_module_quality": args.speed_module_quality or args.module_quality,
         "building_quality": args.building_quality,
         "max_quality_unlocked": args.max_quality_unlocked,
+        "productivity_research": productivity_research,
         "allow_byproducts": args.allow_byproducts,
         "module_cost": args.module_cost,
         "building_cost": args.building_cost,

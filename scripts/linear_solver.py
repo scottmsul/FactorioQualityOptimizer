@@ -158,6 +158,8 @@ class LinearSolver:
         self.building_speed_bonus = QUALITY_BONUSES[building_quality]
         self.beacon_efficiency = BEACON_EFFICIENCIES[building_quality]
 
+        self.productivity_research = config['productivity_research'] if 'productivity_research' in config else {}
+
         self.allow_byproducts = config['allow_byproducts'] if 'allow_byproducts' in config  else None
 
         self.allowed_recipes = config['allowed_recipes'] if 'allowed_recipes' in config else None
@@ -220,6 +222,12 @@ class LinearSolver:
         self.solver = pywraplp.Solver.CreateSolver("GLOP")
         if not self.solver:
             raise RuntimeError('error setting up solver')
+
+    def validate_productivity_research(self):
+        for recipe_key in self.productivity_research.keys():
+            # assume the recipe name is the same as the item name
+            if recipe_key not in self.recipes.keys():
+                raise RuntimeError(f'No recipe found for productivity research item {recipe_key}')
 
     def recipe_is_allowed(self, recipe_key):
         if (self.allowed_recipes is not None) and (self.disallowed_recipes is not None):
@@ -304,6 +312,8 @@ class LinearSolver:
         recipe_qualities = recipe_data['qualities']
         num_possible_qual_modules = list(range(crafting_machine_module_slots+1))
 
+        productivity_research = 0 if recipe_key not in self.productivity_research.keys() else self.productivity_research[recipe_key]
+
         for recipe_quality, num_qual_modules, num_beaconed_speed_modules in itertools.product(recipe_qualities, num_possible_qual_modules, self.possible_num_beaconed_speed_modules):
             if allow_productivity:
                 num_prod_modules = crafting_machine_module_slots - num_qual_modules
@@ -315,7 +325,8 @@ class LinearSolver:
             num_effective_speed_modules = calculate_num_effective_speed_modules(num_beaconed_speed_modules, self.beacon_efficiency)
             quality_penalty_from_speed_modules = num_effective_speed_modules * self.quality_penalty_per_speed_module
 
-            prod_bonus = num_prod_modules * self.prod_module_bonus + crafting_machine_prod_bonus
+            prod_bonus = num_prod_modules * self.prod_module_bonus + crafting_machine_prod_bonus + productivity_research
+            prod_bonus = min(3.0, prod_bonus)
             speed_factor = crafting_machine_speed * (1 + self.building_speed_bonus) * (1 + \
                     + (num_effective_speed_modules * self.speed_module_bonus) \
                     - (num_qual_modules * self.speed_penalty_per_quality_module) \
@@ -392,6 +403,8 @@ class LinearSolver:
         return best_crafting_machine[0]
 
     def run(self):
+        self.validate_productivity_research()
+
         self.num_modules_var = self.solver.NumVar(0, self.solver.infinity(), name='num-modules')
         self.num_buildings_var = self.solver.NumVar(0, self.solver.infinity(), name='num-buildings')
 

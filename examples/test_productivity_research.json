@@ -1,0 +1,38 @@
+{
+    "data": "data/space-age-2.0.11.json",
+    "quality_module_tier": 3,
+    "quality_module_quality": "legendary",
+    "prod_module_tier": 3,
+    "prod_module_quality": "legendary",
+    "speed_module_tier": 3,
+    "speed_module_quality": "legendary",
+    "building_quality": "legendary",
+    "max_quality_unlocked": "legendary",
+    "module_cost": 1.0,
+    "building_cost": 1.0,
+    "disallowed_crafting_machines": [],
+    "inputs": [
+        {
+            "key": "iron-ore",
+            "quality": "normal",
+            "resource": true,
+            "cost": 1.0
+        },
+        {
+            "key": "copper-ore",
+            "quality": "normal",
+            "resource": true,
+            "cost": 1.0
+        }
+    ],
+    "productivity_research": {
+        "copper-cable": 0.5
+    },
+    "outputs": [
+        {
+            "key": "electronic-circuit",
+            "quality": "legendary",
+            "amount": 1.0
+        }
+    ]
+}
