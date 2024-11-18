@@ -98,7 +98,7 @@ def parse_productivity_research_list(items):
         recipe_keys = RESEARCH_PRODUCTIVITY_ITEM_RECIPE_MAP[item_key]
         for recipe_key in recipe_keys:
             item_prod = float(item_prod_str)
-            productivity_research[item_key] = item_prod
+            productivity_research[recipe_key] = item_prod
     return productivity_research
 
 def main():
