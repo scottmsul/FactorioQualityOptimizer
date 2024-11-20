@@ -137,6 +137,7 @@ def main():
     parser.add_argument('-mc', '--module-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
     parser.add_argument('-bc', '--building-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
     parser.add_argument('-o', '--output', type=str, default=None, help='Output results to csv (if present)')
+    parser.add_argument('-of', '--output-flow-chart', type=str, default=None, help='Output the flow chart to a file (.html')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode. Prints out item and recipe information during setup.')
     args = parser.parse_args()
 
@@ -182,7 +183,10 @@ def main():
         ]
     }
 
-    solver = LinearSolver(config=config, output_filename=args.output, verbose=args.verbose)
+    solver = LinearSolver(config=config,
+                          output_filename=args.output,
+                          output_flow_chart=args.output_flow_chart,
+                          verbose=args.verbose)
     solver.run()
 
 if __name__=='__main__':
