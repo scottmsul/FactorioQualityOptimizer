@@ -3,9 +3,12 @@ import itertools
 import json
 import math
 import os
-import pandas as pd
 from collections import defaultdict
+
+import pandas as pd
+from flow_chart import FlowChartGenerator
 from ortools.linear_solver import pywraplp
+from utils import parse_recipe_id
 
 CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -499,6 +502,10 @@ class LinearSolver:
             print(f'Modules used: {self.num_modules_var.solution_value()}')
             print('')
             self.print_machine_layout()
+            if self.output_flow_chart:
+                print(f'Writing flow chart to: {self.output_flow_chart}')
+                FlowChartGenerator(self.solver_recipes, self.recipes, self.items, self.verbose).write_flow_chart(self.output_flow_chart)
+
             print('Recipes used:')
             for recipe_var in self.solver_recipes.values():
                 if(recipe_var.solution_value()>1e-9):
@@ -557,15 +564,24 @@ def main():
         prog='Linear Solver',
         description='This program optimizes prod/qual ratios in factories in order to minimize inputs needed for a given output',
     )
-    parser.add_argument('-c', '--config', type=str, default=default_config_path, help='Config file. Defaults to \'examples/one_step_example.json\'.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode. Prints out item and recipe information during setup.')
-    parser.add_argument('-o', '--output', type=str, default=None, help='Output file')
+    parser.add_argument('-c', '--config', type=str, default=default_config_path,
+                        help='Config file. Defaults to \'examples/one_step_example.json\'.')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Verbose mode. Prints out item and recipe information during setup.')
+    parser.add_argument('-o', '--output', type=str,
+                        default=None, help='Output file')
+    parser.add_argument('-of', '--output-flow-chart', type=str, default=None,
+                        help='Output file for flow chart (.html)')
     args = parser.parse_args()
 
     with open(args.config) as f:
         config = json.load(f)
 
-    solver = LinearSolver(config=config, output_filename=args.output, verbose=args.verbose)
+    solver = LinearSolver(
+        config=config,
+        output_filename=args.output,
+        output_flow_chart=args.output_flow_chart,
+        verbose=args.verbose)
     solver.run()
 
 if __name__=='__main__':
