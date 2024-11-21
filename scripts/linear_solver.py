@@ -6,9 +6,8 @@ import os
 from collections import defaultdict
 
 import pandas as pd
-from flow_chart import FlowChartGenerator
+import flow_chart
 from ortools.linear_solver import pywraplp
-from utils import parse_recipe_id
 
 CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -104,6 +103,15 @@ def calculate_quality_probability_factor(starting_quality, ending_quality, max_q
 def get_recipe_id(recipe_key, quality, crafting_machine_key, num_qual_modules, num_prod_modules, num_beaconed_speed_modules):
     return f'{QUALITY_NAMES[quality]}__{recipe_key}__{crafting_machine_key}__{num_qual_modules}-qual__{num_prod_modules}-prod__{num_beaconed_speed_modules}-beaconed-speed'
 
+def parse_recipe_id(recipe_id):
+    objs = recipe_id.split('__')
+    return {
+        'recipe_quality': objs[0],
+        'recipe_name': objs[1],
+        'machine': objs[2],
+        'num_qual_modules': objs[3].split('-')[0],
+        'num_prod_modules': objs[4].split('-')[0]
+    }
 
 def get_resource_item_key(item_key):
     return f'{item_key}-resource'
@@ -496,7 +504,7 @@ class LinearSolver:
             self.print_machine_layout()
             if self.output_flow_chart:
                 print(f'Writing flow chart to: {self.output_flow_chart}')
-                FlowChartGenerator(self.solver_recipes, self.recipes, self.items, self.verbose).write_flow_chart(self.output_flow_chart)
+                flow_chart.FlowChartGenerator(self.solver_recipes, self.recipes, self.items, self.verbose).write_flow_chart(self.output_flow_chart)
 
             print('Recipes used:')
             for recipe_var in self.solver_recipes.values():

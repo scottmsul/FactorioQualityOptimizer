@@ -1,8 +1,7 @@
 import math
 from collections import defaultdict
 
-from utils import parse_recipe_id
-
+import linear_solver
 
 class FlowChartGenerator:
     def __init__(self, solver_recipes, recipes, items, verbose):
@@ -24,7 +23,7 @@ class FlowChartGenerator:
         
         for recipe_var in self.solver_recipes.values():
             if recipe_var.solution_value() > 1e-9:
-                data = parse_recipe_id(recipe_var.name())
+                data = linear_solver.parse_recipe_id(recipe_var.name())
                 data['solution_value'] = recipe_var.solution_value()
                 
                 recipe_name = data['recipe_name']
@@ -78,7 +77,8 @@ class FlowChartGenerator:
                         f'{math.ceil(variant["solution_value"])}]')
             output_lines.append(node_text)
             
-        return f"subgraph {recipe_name}\n{'\n'.join(output_lines)}\nend\n"
+        output_lines_str = '\n'.join(output_lines)
+        return f"subgraph {recipe_name}\n{output_lines_str}\nend\n"
 
     def generate_class_definitions(self):
         """Generate Mermaid class definitions for different quality levels."""
@@ -111,12 +111,14 @@ class FlowChartGenerator:
             for class_id, graph_ids in classes.items()
         ]
         
+        subgraphs_str = '\n'.join(subgraphs)
+        class_assignments_str = '\n'.join(class_assignments)
         # Combine all components into final sequence
         sequence = (
             "graph LR\n"
-            f"{'\n'.join(subgraphs)}"
+            f"{subgraphs_str}"
             f"{self.generate_class_definitions()}\n"
-            f"{'\n'.join(class_assignments)}"
+            f"{class_assignments_str}"
         )
         
         if self.verbose:
