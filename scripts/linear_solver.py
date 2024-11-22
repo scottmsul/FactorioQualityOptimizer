@@ -50,6 +50,9 @@ POSSIBLE_NUM_BEACONED_SPEED_MODULES = list(range(17))
 
 BEACON_EFFICIENCIES = [1.5, 1.7, 1.9, 2.1, 2.5]
 
+MINIMUM_MODULE_SPEED_FACTOR = 0.2
+MAXIMUM_PRODUCTIVITY_BONUS = 3.0
+
 def calculate_num_effective_speed_modules(num_beaconed_speed_modules, beacon_efficiency):
     if num_beaconed_speed_modules == 0:
         return 0
@@ -329,12 +332,14 @@ class LinearSolver:
             quality_penalty_from_speed_modules = num_effective_speed_modules * self.quality_penalty_per_speed_module
 
             prod_bonus = num_prod_modules * self.prod_module_bonus + crafting_machine_prod_bonus + productivity_research
-            prod_bonus = min(3.0, prod_bonus)
-            speed_factor = crafting_machine_speed * (1 + self.building_speed_bonus) * (1 + \
+            prod_bonus = min(MAXIMUM_PRODUCTIVITY_BONUS, prod_bonus)
+
+            module_speed_factor = 1 + \
                     + (num_effective_speed_modules * self.speed_module_bonus) \
                     - (num_qual_modules * self.speed_penalty_per_quality_module) \
-                    - (num_prod_modules * self.speed_penalty_per_prod_module) \
-            )
+                    - (num_prod_modules * self.speed_penalty_per_prod_module)
+            module_speed_factor = max(MINIMUM_MODULE_SPEED_FACTOR, module_speed_factor)
+            speed_factor = crafting_machine_speed * (1 + self.building_speed_bonus) * module_speed_factor
 
             # we want recipe_var to represent the number of buildings when all is finished
             # that way (recipe_var * module_cost) accurately represents the number of modules used per recipe
