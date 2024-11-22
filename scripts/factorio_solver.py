@@ -25,6 +25,7 @@ DEFAULT_MODULE_QUALITY = 'legendary'
 DEFAULT_BUILDING_QUALITY = 'legendary'
 DEFAULT_MAX_QUALITY_UNLOCKED = 'legendary'
 DEFAULT_OFFSHORE_COST = 0.1
+DEFAULT_FARMING_COST = 1.0
 DEFAULT_RESOURCE_COST = 1.0
 DEFAULT_MODULE_COST = 1.0
 DEFAULT_BUILDING_COST = 1.0
@@ -41,7 +42,7 @@ RESEARCH_PRODUCTIVITY_ITEM_RECIPE_MAP = {
     # ignore rocket-parts, not currently supported
 }
 
-def setup_inputs(resource_cost, offshore_cost):
+def setup_inputs(resource_cost, farming_cost, offshore_cost):
     inputs = []
     for planet in FACTORIO_DATA['planets']:
         for offshore_key in planet['resources']['offshore']:
@@ -52,7 +53,18 @@ def setup_inputs(resource_cost, offshore_cost):
                 'cost': offshore_cost
             }
             inputs.append(input)
-        # skip plants for now
+        # for plants, ignore seeds, planting, agricultural tower recipes, just include farming results with cost of farming_cost
+        for plant in planet['resources']['plants']:
+            plant_info = [p for p in FACTORIO_DATA['plants'] if p['key']==plant][0]
+            results = plant_info['results']
+            for result in results:
+                input = {
+                    'key': result['name'],
+                    'quality': 'normal',
+                    'resource': False,
+                    'cost': farming_cost
+                }
+                inputs.append(input)
         for resource_key in planet['resources']['resource']:
             input = {
                 'key': resource_key,
@@ -133,6 +145,7 @@ def main():
     parser.add_argument('-ac', '--allowed-crafting-machines', nargs='+', type=str, help='Allowed crafting machines. Only one of {--allowed-crafting-machines} or {--disallowed-crafting-machines} can be used. See data/space-age-2.0.11.json for crafting machine keys. (default: None)')
     parser.add_argument('-dc', '--disallowed-crafting-machines', nargs='+', type=str, help='Disallowed crafting machines. Only one of {--disallowed-crafting-machines} or {--disdisallowed-crafting-machines} can be used. See data/space-age-2.0.11.json for crafting machine keys. (default: None)')
     parser.add_argument('-rc', '--resource-cost', type=float, default=DEFAULT_RESOURCE_COST, help='Resource cost')
+    parser.add_argument('-fc', '--farming-cost', type=float, default=DEFAULT_FARMING_COST, help='Cost of 1 unit of each farmable plant, ignores seeds/planting')
     parser.add_argument('-oc', '--offshore-cost', type=float, default=DEFAULT_OFFSHORE_COST, help='Offshore cost')
     parser.add_argument('-mc', '--module-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
     parser.add_argument('-bc', '--building-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
@@ -142,7 +155,7 @@ def main():
     args = parser.parse_args()
 
     if (args.input_items == None) and (args.input_resources == None):
-        inputs = setup_inputs(args.resource_cost, args.offshore_cost)
+        inputs = setup_inputs(args.resource_cost, args.farming_cost, args.offshore_cost)
     else:
         inputs = []
         if args.input_items != None:
