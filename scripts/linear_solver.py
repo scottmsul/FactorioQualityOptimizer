@@ -113,7 +113,8 @@ def parse_recipe_id(recipe_id):
         'recipe_name': objs[1],
         'machine': objs[2],
         'num_qual_modules': objs[3].split('-')[0],
-        'num_prod_modules': objs[4].split('-')[0]
+        'num_prod_modules': objs[4].split('-')[0],
+        'num_beaconed_speed_modules': objs[5].split('-')[0]
     }
 
 def get_resource_item_key(item_key):
@@ -121,6 +122,13 @@ def get_resource_item_key(item_key):
 
 def get_resource_recipe_key(item_key):
     return f'{item_key}-mining'
+
+def parse_item_id(item_id):
+    objs = item_id.split('__')
+    return {
+        'item_key': objs[1],
+        'quality': objs[0]
+    }
 
 def get_item_id(item_key, quality):
     return f'{QUALITY_NAMES[quality]}__{item_key}'
@@ -133,6 +141,16 @@ def get_byproduct_id(item_id):
 
 def get_output_id(item_id):
     return f'output__{item_id}'
+
+def format_float(f):
+    if f >= 1.0:
+        return '{:.2f}'.format(f)
+    elif f >= 0.1:
+        return '{:.3f}'.format(f)
+    elif f >= 0.01:
+        return '{:.4f}'.format(f)
+    else:
+        return '{:.2e}'.format(f) # scientific notation for small numbers
 
 class LinearSolver:
 
@@ -202,8 +220,6 @@ class LinearSolver:
             recipe_data = self.recipes[recipe_key]
             for ingredient in recipe_data['ingredients']:
                 if ingredient['name'] not in self.items.keys():
-                    if self.verbose:
-                        print(f'IGNORING RECIPE {recipe_data["key"]}, {ingredient["name"]} NOT FOUND IN ITEMS LIST')
                     # there are a handful of "nonsense-recipes" in the data file with items that don't exist (red wire recycling, etc)
                     del self.recipes[recipe_key]
                 else:
@@ -359,9 +375,10 @@ class LinearSolver:
                 ingredient_amount_per_second_per_building = ingredient['amount'] * speed_factor / energy_required
 
                 # negative because it is consumed
-                self.solver_items[ingredient_item_id].append( (-1) * ingredient_amount_per_second_per_building * recipe_var)
-                if self.verbose:
-                    print(f'recipe {recipe_id} consumes {ingredient_amount_per_second_per_building} {ingredient_item_id}')
+                self.solver_items[ingredient_item_id].append({
+                    'var': recipe_var,
+                    'amount': (-1) * ingredient_amount_per_second_per_building
+                })
             # ingredient qualities can produce all possible higher qualities
             for result_data in results:
                 result_item_data = self.items[result_data['name']]
@@ -381,10 +398,16 @@ class LinearSolver:
                     else:
                         quality_probability_factor = 1.0
                     result_amount_per_second_per_building = expected_amount * speed_factor * quality_probability_factor / energy_required
+                    if result_amount_per_second_per_building < 0:
+                        print(f'expected_amount: {expected_amount}')
+                        print(f'speed_factor: {speed_factor}')
+                        print(f'quality_probability_factor: {quality_probability_factor}')
+                        print(f'energy_required: {energy_required}')
 
-                    self.solver_items[result_item_id].append(result_amount_per_second_per_building * recipe_var)
-                    if self.verbose:
-                        print(f'recipe {recipe_id} produces {result_amount_per_second_per_building} {result_item_id}')
+                    self.solver_items[result_item_id].append({
+                        'var': recipe_var,
+                        'amount': result_amount_per_second_per_building
+                    })
 
     def get_best_crafting_machine(self, recipe_data):
         recipe_category = recipe_data['category']
@@ -395,8 +418,6 @@ class LinearSolver:
 
         # seems to only affect rocket-parts/rocket-silo, fix this later
         if len(allowed_crafting_machines)==0:
-            if self.verbose:
-                print(f'BAD RECIPE {recipe_data["key"]}, NO CRAFTING MACHINES FOUND')
             return None
 
         max_module_slots = max(c['module_slots'] for c in allowed_crafting_machines)
@@ -447,7 +468,10 @@ class LinearSolver:
             input_id = get_input_id(item_id)
             solver_item_var = self.solver.NumVar(0, self.solver.infinity(), name=input_id)
             self.solver_inputs[item_id] = solver_item_var
-            self.solver_items[item_id].append(solver_item_var)
+            self.solver_items[item_id].append({
+                'var': solver_item_var,
+                'amount': 1.0
+            })
             self.solver_costs.append(cost * solver_item_var)
             solver_input_item_ids.append(item_id)
 
@@ -459,7 +483,10 @@ class LinearSolver:
             item_id = get_item_id(output_item_key, output_quality)
             amount = output['amount']
             output_id = get_output_id(item_id)
-            self.solver_items[item_id].append(-amount)
+            self.solver_items[item_id].append({
+                'var': None,
+                'amount': -amount
+            })
             solver_output_item_ids.append(item_id)
 
         if self.allow_byproducts:
@@ -473,10 +500,19 @@ class LinearSolver:
                         byproduct_id = get_byproduct_id(byproduct_item_id)
                         solver_item_var = self.solver.NumVar(0, self.solver.infinity(), name=byproduct_id)
                         self.solver_byproducts[byproduct_item_id] = solver_item_var
-                        self.solver_items[byproduct_item_id].append( (-1.0) * solver_item_var)
+                        self.solver_items[byproduct_item_id].append({
+                            'var': solver_item_var,
+                            'amount': (-1.0) * solver_item_var
+                        })
 
         for item_id, solver_vars in self.solver_items.items():
-            self.solver.Add(sum(solver_vars)==0)
+            constraint = []
+            for factor in solver_vars:
+                if factor['var'] is None:
+                    constraint.append(factor['amount'])
+                else:
+                    constraint.append(factor['var'] * factor['amount'])
+            self.solver.Add(sum(constraint)==0)
 
         self.solver_costs.append(self.num_modules_var * self.module_cost)
         self.solver_costs.append(self.num_buildings_var * self.building_cost)
@@ -511,10 +547,8 @@ class LinearSolver:
                 print(f'Writing flow chart to: {self.output_flow_chart}')
                 flow_chart.FlowChartGenerator(self.solver_recipes, self.recipes, self.items, self.verbose).write_flow_chart(self.output_flow_chart)
 
-            print('Recipes used:')
-            for recipe_var in self.solver_recipes.values():
-                if(recipe_var.solution_value()>1e-9):
-                    print(f'{recipe_var.name()}: {recipe_var.solution_value()}')
+            if self.verbose:
+                self.print_friendly_recipes()
 
             if self.output_filename is not None:
                 print('')
@@ -530,6 +564,53 @@ class LinearSolver:
 
         else:
             print("The problem does not have an optimal solution.")
+
+    def print_friendly_recipes(self):
+        recipe_data = defaultdict(dict)
+        for recipe_var in self.solver_recipes.values():
+            if(recipe_var.solution_value()>1e-9):
+                curr_recipe_data = parse_recipe_id(recipe_var.name())
+                curr_recipe_data['num_machines'] = recipe_var.solution_value()
+                curr_recipe_data['recipe_var'] = recipe_var
+                outer_key = curr_recipe_data['recipe_name']
+                inner_key = curr_recipe_data['recipe_quality']
+                recipe_data[outer_key][inner_key] = curr_recipe_data
+        for recipe_name, outer_value in recipe_data.items():
+            print(recipe_name)
+            for quality_name, recipe_data in outer_value.items():
+                print(f'    {quality_name}: {format_float(recipe_data["num_machines"])}')
+                print(f'        machine: {recipe_data["machine"]}')
+                print(f'        modules: {recipe_data["num_qual_modules"]}Q {recipe_data["num_prod_modules"]}P')
+                if int(recipe_data["num_beaconed_speed_modules"]) > 0:
+                    print(f'        beaconed speed modules: {recipe_data["num_beaconed_speed_modules"]}')
+                recipe_info = self.recipes[recipe_data['recipe_name']]
+                items_used = recipe_info['ingredients'] + recipe_info['results']
+                print('        ingredients:')
+                # horrible unreadable code below
+                for ingredient in recipe_info['ingredients']:
+                    item_name = ingredient['name']
+                    possible_items = [i for i in self.solver_items if i.endswith(f'__{item_name}')]
+                    for possible_item in possible_items:
+                        vars = self.solver_items[possible_item]
+                        for var in vars:
+                            if var['var'] is recipe_data['recipe_var'] and var['amount'] < 0:
+                                recipe_amount = var['amount']
+                                total_amount = (-1) * recipe_amount * recipe_data['num_machines']
+                                item_info = parse_item_id(possible_item)
+                                print(f'            {item_info["item_key"]} ({item_info["quality"]}): {format_float(total_amount)}')
+                print('        results:')
+                for result in recipe_info['results']:
+                    item_name = result['name']
+                    possible_items = [i for i in self.solver_items if i.endswith(f'__{item_name}')]
+                    for possible_item in possible_items:
+                        vars = self.solver_items[possible_item]
+                        for var in vars:
+                            if var['var'] is recipe_data['recipe_var'] and var['amount'] > 0:
+                                recipe_amount = var['amount']
+                                total_amount = recipe_amount * recipe_data['num_machines']
+                                item_info = parse_item_id(possible_item)
+                                print(f'            {item_info["item_key"]} ({item_info["quality"]}): {format_float(total_amount)}')
+
 
     def print_machine_layout(self):
         variants = defaultdict(list)
@@ -572,7 +653,7 @@ def main():
     parser.add_argument('-c', '--config', type=str, default=default_config_path,
                         help='Config file. Defaults to \'examples/one_step_example.json\'.')
     parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Verbose mode. Prints out item and recipe information during setup.')
+                        help='Verbose mode. Prints input and output amounts for each solved recipe.')
     parser.add_argument('-o', '--output', type=str,
                         default=None, help='Output file')
     parser.add_argument('-of', '--output-flow-chart', type=str, default=None,
