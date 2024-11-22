@@ -398,11 +398,6 @@ class LinearSolver:
                     else:
                         quality_probability_factor = 1.0
                     result_amount_per_second_per_building = expected_amount * speed_factor * quality_probability_factor / energy_required
-                    if result_amount_per_second_per_building < 0:
-                        print(f'expected_amount: {expected_amount}')
-                        print(f'speed_factor: {speed_factor}')
-                        print(f'quality_probability_factor: {quality_probability_factor}')
-                        print(f'energy_required: {energy_required}')
 
                     self.solver_items[result_item_id].append({
                         'var': recipe_var,
@@ -502,7 +497,7 @@ class LinearSolver:
                         self.solver_byproducts[byproduct_item_id] = solver_item_var
                         self.solver_items[byproduct_item_id].append({
                             'var': solver_item_var,
-                            'amount': (-1.0) * solver_item_var
+                            'amount': -1.0
                         })
 
         for item_id, solver_vars in self.solver_items.items():
