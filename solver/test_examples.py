@@ -1,6 +1,11 @@
 import json
 import os
-from linear_solver import run_solver_from_command_line
+import sys
+
+CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(CODEBASE_PATH)
+
+from solver.linear_solver import run_solver_from_command_line
 
 def main():
     codebase_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))

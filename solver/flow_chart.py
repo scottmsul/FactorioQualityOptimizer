@@ -1,7 +1,7 @@
 import math
 from collections import defaultdict
 
-import linear_solver
+import solver.linear_solver as ls
 
 class FlowChartGenerator:
     def __init__(self, solver_recipes, recipes, items, verbose):
@@ -23,7 +23,7 @@ class FlowChartGenerator:
         
         for recipe_var in self.solver_recipes.values():
             if recipe_var.solution_value() > 1e-9:
-                data = linear_solver.parse_recipe_id(recipe_var.name())
+                data = ls.parse_recipe_id(recipe_var.name())
                 data['solution_value'] = recipe_var.solution_value()
                 
                 recipe_name = data['recipe_key']

@@ -3,13 +3,15 @@ import itertools
 import json
 import math
 import os
-from collections import defaultdict
-
 import pandas as pd
-import flow_chart
+import sys
+from collections import defaultdict
 from ortools.linear_solver import pywraplp
 
 CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(CODEBASE_PATH)
+
+import solver.flow_chart as fc
 
 DEFAULT_RESOURCE_CATEGORY = 'basic-solid'
 
@@ -706,7 +708,7 @@ def run_solver_from_command_line(config, data, verbose=False, output_csv=None, o
         output_to_csv(results, data, output_csv)
 
     if output_flow_chart is not None:
-        flow_chart.FlowChartGenerator(solver.solver_recipes, solver.recipes, solver.items, verbose).write_flow_chart(output_flow_chart)
+        fc.FlowChartGenerator(solver.solver_recipes, solver.recipes, solver.items, verbose).write_flow_chart(output_flow_chart)
 
 def main():
     codebase_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
