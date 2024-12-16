@@ -1,0 +1,35 @@
+<!doctype html>
+<title>Factorio Quality Optimizer</title>
+<section class="content">
+  {% if results is defined %}
+  {% if results['solved'] %}
+    <h1>Results</h1>
+    <div>Total Cost: {{ results['cost'] }}</div>
+    <br>
+    <div>Buildings Used: {{ results['num_buildings'] }}</div>
+    <br>
+    <div>Modules Used: {{ results['num_modules'] }}</div>
+    <br>
+    <div>Inputs: </div>
+    {% for input_item_key, outer_value in results['inputs'].items() %}
+      {% for input_item_quality, input_amount in outer_value.items() %}
+      <div>{{ input_item_quality }} {{ input_item_key }}: {{ input_amount }}</div>
+      {% endfor %}
+    {% endfor %}
+    <br>
+    <div>Recipes: </div>
+    {% for recipe_key, outer_value in results['recipes'].items() %}
+      {% for recipe_quality, inner_value in outer_value.items() %}
+        <div>{{ recipe_quality }} {{ recipe_key }}</div>
+        {% for recipe_info in inner_value %}
+          <div>{{ recipe_info['num_prod_modules'] }}P {{ recipe_info['num_qual_modules'] }}Q {{ recipe_info['num_beaconed_speed_modules'] }}BS in {{ recipe_info['machine'] }}: {{ recipe_info['num_buildings'] }}</div>
+          <br>
+        {% endfor %}
+      {% endfor %}
+    {% endfor %}
+  {% else %}
+    <h1>Error when solving...</h1>
+  {% endif %}
+  {% endif %}
+  <input type="button" value="Return to Calculation Page" onclick="history.back()"/>
+</section>

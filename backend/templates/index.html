@@ -1,0 +1,114 @@
+{% from 'macros.html' import quality_select, quality_select_normal_default, module_tier_select, list_type_select %}
+
+<!doctype html>
+<title>Factorio Quality Optimizer</title>
+<section class="content">
+  <h1>
+    Calculation Setup
+  </h1>
+  <form action="/results" method="GET">
+    <div>
+      <label>Output Item: </label>
+      <input type="text" name="output_item" value="electronic-circuit" />
+    </div>
+    <div>
+      <label>Output Amount per Second: </label>
+      <input type="number" name="output_amount" value="1" />
+    </div>
+    <div>
+      <label>Output Quality: </label>
+      {{ quality_select(name="output_quality") }}
+    </div>
+    <div>
+      <label>Prod Module Tier: </label>
+      {{ module_tier_select(name="prod_module_tier") }}
+    </div>
+    <div>
+      <label>Prod Module Quality: </label>
+      {{ quality_select(name="prod_module_quality") }}
+    </div>
+    <div>
+      <label>Quality Module Tier: </label>
+      {{ module_tier_select(name="quality_module_tier") }}
+    </div>
+    <div>
+      <label>Quality Module Quality: </label>
+      {{ quality_select(name="quality_module_quality") }}
+    </div>
+    <div>
+      <label>Check Speed Beacons: </label>
+      <input type="checkbox" name="check_speed_modules" checked />
+    </div>
+    <div>
+      <label>Speed Module Tier: </label>
+      {{ module_tier_select(name="speed_module_tier") }}
+    </div>
+    <div>
+      <label>Speed Module Quality: </label>
+      {{ quality_select(name="speed_module_quality") }}
+    </div>
+    <div>
+      <label>Building Quality: </label>
+      {{ quality_select(name="building_quality") }}
+    </div>
+    <div>
+      <label>Max Quality Unlocked: </label>
+      {{ quality_select(name="max_quality_unlocked") }}
+    </div>
+    <div>
+      <label>Input Items: </label>
+      <input type="text" name="input_items" value="iron-ore=1"/>
+    </div>
+    <div>
+      <label>Input Quality: </label>
+      {{ quality_select_normal_default(name="input_quality") }}
+    </div>
+    <div>
+      <label>Input Mineable Resources: </label>
+      <input type="text" name="input_resources" value="copper-ore=1"/>
+    </div>
+    <div>
+      <label>Productivity Research: </label>
+      <input type="text" name="productivity_research" />
+    </div>
+    <div>
+      <label>Allow Byproducts: </label>
+      <input type="checkbox" name="allow_byproducts" />
+    </div>
+    <div>
+      <label>Filter Input Recipes: </label>
+      <input type="checkbox" name="filter_input_recipes" />
+    </div>
+    <div>
+      <label>Input Recipes Type: </label>
+      {{ list_type_select(name="input_recipes_type") }}
+    </div>
+    <div>
+      <label>Input Recipes: </label>
+      <input type="text" name="input_recipes" />
+    </div>
+    <div>
+      <label>Filter Input Crafting machines: </label>
+      <input type="checkbox" name="filter_input_crafting_machines" />
+    </div>
+    <div>
+      <label>Input Crafting Machines Type: </label>
+      {{ list_type_select(name="input_crafting_machines_type") }}
+    </div>
+    <div>
+      <label>Input Crafting Machines: </label>
+      <input type="text" name="input_crafting_machines" />
+    </div>
+    <div>
+      <label>Module Cost: </label>
+      <input type="number" name="module_cost" value="1" />
+    </div>
+    <div>
+      <label>Building Cost: </label>
+      <input type="number" name="building_cost" value="1" />
+    </div>
+    <div>
+      <input type="submit" value="calculate" />
+    </div>
+  </form>
+</section>

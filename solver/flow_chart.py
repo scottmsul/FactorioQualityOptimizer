@@ -1,7 +1,7 @@
 import math
 from collections import defaultdict
 
-import linear_solver
+import solver.linear_solver as ls
 
 class FlowChartGenerator:
     def __init__(self, solver_recipes, recipes, items, verbose):
@@ -23,10 +23,10 @@ class FlowChartGenerator:
         
         for recipe_var in self.solver_recipes.values():
             if recipe_var.solution_value() > 1e-9:
-                data = linear_solver.parse_recipe_id(recipe_var.name())
+                data = ls.parse_recipe_id(recipe_var.name())
                 data['solution_value'] = recipe_var.solution_value()
                 
-                recipe_name = data['recipe_name']
+                recipe_name = data['recipe_key']
                 if data['machine'] == 'recycler':
                     recipe_name = recipe_name.replace('-recycling', '')
                     
@@ -61,7 +61,7 @@ class FlowChartGenerator:
         for variant in variant_list:
             # Get localized names
             machine = self.get_localized_name(variant['machine'], self.items)
-            name = self.get_localized_name(variant['recipe_name'], self.recipes)
+            name = self.get_localized_name(variant['recipe_key'], self.recipes)
             
             # Format modules string
             mods = self.format_modules(variant['num_qual_modules'], 
@@ -96,6 +96,8 @@ class FlowChartGenerator:
 
     def write_flow_chart(self, output_flow_chart):
         """Generate and save a Mermaid flow chart of the recipe system."""
+        print('')
+        print(f'Writing flow chart to: {output_flow_chart}')
         variants = self.collect_recipe_variants()
         classes = defaultdict(list)
         

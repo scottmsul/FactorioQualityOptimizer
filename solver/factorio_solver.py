@@ -7,9 +7,13 @@ Contains many convenience args to make it quick and easy to optimize actual fact
 import argparse
 import json
 import os
-from linear_solver import LinearSolver
+import sys
 
 CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(CODEBASE_PATH)
+
+from solver.linear_solver import run_solver_from_command_line
+
 FACTORIO_DATA_FILENAME = os.path.join('data', 'space-age-2.0.11.json')
 FACTORIO_DATA_PATH = os.path.join(CODEBASE_PATH, FACTORIO_DATA_FILENAME)
 with open(FACTORIO_DATA_PATH) as f:
@@ -149,8 +153,8 @@ def main():
     parser.add_argument('-oc', '--offshore-cost', type=float, default=DEFAULT_OFFSHORE_COST, help='Offshore cost')
     parser.add_argument('-mc', '--module-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
     parser.add_argument('-bc', '--building-cost', type=float, default=DEFAULT_MODULE_COST, help='Module cost')
-    parser.add_argument('-o', '--output', type=str, default=None, help='Output results to csv (if present)')
-    parser.add_argument('-of', '--output-flow-chart', type=str, default=None, help='Output the flow chart to a file (.html')
+    parser.add_argument('-o', '--output-csv', type=str, default=None, help='Output recipes to csv file')
+    parser.add_argument('-of', '--output-flow-chart', type=str, default=None, help='Output recipes to flow chart html file')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode. Prints input and output amounts for each solved recipe.')
     args = parser.parse_args()
 
@@ -168,7 +172,6 @@ def main():
     productivity_research = parse_productivity_research_list(args.productivity_research) if args.productivity_research else {}
 
     config = {
-        "data": FACTORIO_DATA_FILENAME,
         "quality_module_tier": args.quality_module_tier,
         "quality_module_quality": args.quality_module_quality or args.module_quality,
         "prod_module_tier": args.prod_module_tier,
@@ -196,11 +199,7 @@ def main():
         ]
     }
 
-    solver = LinearSolver(config=config,
-                          output_filename=args.output,
-                          output_flow_chart=args.output_flow_chart,
-                          verbose=args.verbose)
-    solver.run()
+    run_solver_from_command_line(config, FACTORIO_DATA, args.verbose, args.output_csv, args.output_flow_chart)
 
 if __name__=='__main__':
     main()

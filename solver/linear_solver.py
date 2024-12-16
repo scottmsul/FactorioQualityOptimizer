@@ -3,13 +3,15 @@ import itertools
 import json
 import math
 import os
-from collections import defaultdict
-
 import pandas as pd
-import flow_chart
+import sys
+from collections import defaultdict
 from ortools.linear_solver import pywraplp
 
 CODEBASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(CODEBASE_PATH)
+
+import solver.flow_chart as fc
 
 DEFAULT_RESOURCE_CATEGORY = 'basic-solid'
 
@@ -110,18 +112,18 @@ def parse_recipe_id(recipe_id):
     objs = recipe_id.split('__')
     return {
         'recipe_quality': objs[0],
-        'recipe_name': objs[1],
+        'recipe_key': objs[1],
         'machine': objs[2],
-        'num_qual_modules': objs[3].split('-')[0],
-        'num_prod_modules': objs[4].split('-')[0],
-        'num_beaconed_speed_modules': objs[5].split('-')[0]
+        'num_qual_modules': int(objs[3].split('-')[0]),
+        'num_prod_modules': int(objs[4].split('-')[0]),
+        'num_beaconed_speed_modules': int(objs[5].split('-')[0])
     }
 
 def get_resource_item_key(item_key):
-    return f'{item_key}-resource'
+    return f'{item_key}--resource'
 
 def get_resource_recipe_key(item_key):
-    return f'{item_key}-mining'
+    return f'{item_key}--mining'
 
 def parse_item_id(item_id):
     objs = item_id.split('__')
@@ -136,8 +138,22 @@ def get_item_id(item_key, quality):
 def get_input_id(item_id):
     return f'input__{item_id}'
 
+def parse_input_id(input_id):
+    _, quality_name, item_key = input_id.split('__')
+    return {
+        'item_key': item_key,
+        'quality_name': quality_name
+    }
+
 def get_byproduct_id(item_id):
     return f'byproduct__{item_id}'
+
+def parse_byproduct_id(byproduct_id):
+    _, quality_name, item_key = byproduct_id.split('__')
+    return {
+        'item_key': item_key,
+        'quality_name': quality_name
+    }
 
 def get_output_id(item_id):
     return f'output__{item_id}'
@@ -154,10 +170,9 @@ def format_float(f):
 
 class LinearSolver:
 
-    def __init__(self, config, output_filename=None, output_flow_chart=None, verbose=False):
+    def __init__(self, config, data, output_filename=None, output_flow_chart=None):
         self.output_filename = output_filename
         self.output_flow_chart = output_flow_chart
-        self.verbose = verbose
 
         quality_module_tier = config['quality_module_tier']
         quality_module_quality_level = QUALITY_LEVELS[config['quality_module_quality']]
@@ -197,9 +212,6 @@ class LinearSolver:
         self.module_cost = config['module_cost']
         self.inputs = config['inputs']
         self.outputs = config['outputs']
-
-        with open(os.path.join(CODEBASE_PATH, config['data'])) as f:
-            data = json.load(f)
 
         self.resources = { resource_data['key']: resource_data for resource_data in data['resources'] }
         self.mining_drills = { mining_drill_data['key']: mining_drill_data for mining_drill_data in data['mining_drills'] }
@@ -513,129 +525,190 @@ class LinearSolver:
         self.solver_costs.append(self.num_buildings_var * self.building_cost)
         self.solver.Minimize(sum(self.solver_costs))
 
-        # Solve the system.
-        print(f"Solving...")
-        print('')
         status = self.solver.Solve()
 
+        results = {}
+
         if status == pywraplp.Solver.OPTIMAL:
-            print("Solution:")
-            print(f"Objective value = {self.solver.Objective().Value()}")
-            print('')
-            print('Inputs used:')
+            results['solved'] = True
+
+            results['cost'] = self.solver.Objective().Value()
+            results['num_buildings'] = self.num_buildings_var.solution_value()
+            results['num_modules'] = self.num_modules_var.solution_value()
+
+            results['inputs'] = defaultdict(dict)
             for input_var in self.solver_inputs.values():
                 if input_var.solution_value() > 1e-9:
-                    print(f'{input_var.name()}: {input_var.solution_value()}')
-            print('')
+                    input_info = parse_input_id(input_var.name())
+                    results['inputs'][input_info['item_key']][input_info['quality_name']] = input_var.solution_value()
+
             if self.allow_byproducts:
-                print('Byproducts:')
+                results['byproducts'] = defaultdict(dict)
                 for byproduct_var in self.solver_byproducts.values():
                     if byproduct_var.solution_value() > 1e-9:
-                        print(f'{byproduct_var.name()}: {byproduct_var.solution_value()}')
-                print('')
-            print(f'Buildings used: {self.num_buildings_var.solution_value()}')
-            print('')
-            print(f'Modules used: {self.num_modules_var.solution_value()}')
-            print('')
-            self.print_machine_layout()
-            if self.output_flow_chart:
-                print(f'Writing flow chart to: {self.output_flow_chart}')
-                flow_chart.FlowChartGenerator(self.solver_recipes, self.recipes, self.items, self.verbose).write_flow_chart(self.output_flow_chart)
+                        byproduct_info = parse_byproduct_id(byproduct_var.name())
+                        results['byproducts'][byproduct_info['item_key']][byproduct_info['quality_name']] = byproduct_var.solution_value()
 
-            if self.verbose:
-                self.print_friendly_recipes()
+            results['recipes'] = defaultdict(lambda: defaultdict(list))
+            for recipe_var in self.solver_recipes.values():
+                if(recipe_var.solution_value()>1e-9):
+                    recipe_info = parse_recipe_id(recipe_var.name())
+                    recipe_key = recipe_info['recipe_key']
+                    num_buildings = recipe_var.solution_value()
 
-            if self.output_filename is not None:
-                print('')
-                print(f'Writing output to: {self.output_filename}')
-                recipe_data = []
-                for recipe_var in self.solver_recipes.values():
-                    if(recipe_var.solution_value()>1e-9):
-                        curr_recipe_data = parse_recipe_id(recipe_var.name())
-                        curr_recipe_data['num_buildings'] = recipe_var.solution_value()
-                        recipe_data.append(curr_recipe_data)
-                df = pd.DataFrame(columns=['recipe_name', 'recipe_quality', 'machine', 'num_qual_modules', 'num_prod_modules', 'num_buildings'], data=recipe_data)
-                df.to_csv(self.output_filename, index=False)
+                    recipe_metadata = self.recipes[recipe_key]
+
+                    # this part is tricky so I'll add a detailed explanation below
+                    # recall the definition of self.solver_items:
+                    #   - keys are '{quality_name}__{item_name}'
+                    #   - values are lists of { 'var': solver_variable, 'amount': float }
+                    # in this context:
+                    #   - 'var' points to the ortools variable that represents the number of buildings for a given recipe
+                    #   - 'amount' is how much each unit of that recipe is affected by the solver_items key
+                    # to get the ingredients/products that are consumed/produced by a recipe, we do the following:
+                    #   - loop over everything in self.solver_items
+                    #   - check if any of its associated variables match the current recipe_var
+                    #   - if so, multiply its amount by the recipe's solved num_buildings and add it to the ingredients/products entry
+                    ingredients = {}
+                    products = {}
+                    for item_id, solver_var_infos in self.solver_items.items():
+                        for solver_var_info in solver_var_infos:
+                            if recipe_var is solver_var_info['var']:
+                                amount_per_recipe = solver_var_info['amount']
+                                total_amount = amount_per_recipe * num_buildings
+                                # note that total_amount can equal zero in some cases (i.e. in quality recipe with no quality modules)
+                                if total_amount < 0:
+                                    ingredients[item_id] = (-1) * total_amount
+                                elif total_amount > 0:
+                                    products[item_id] = total_amount
+
+                    results['recipes'][recipe_info['recipe_key']][recipe_info['recipe_quality']].append({
+                        'num_buildings': recipe_var.solution_value(),
+                        'machine': recipe_info['machine'],
+                        'num_prod_modules': recipe_info['num_prod_modules'],
+                        'num_qual_modules': recipe_info['num_qual_modules'],
+                        'num_beaconed_speed_modules': recipe_info['num_beaconed_speed_modules'],
+                        'ingredients': ingredients,
+                        'products': products
+                    })
 
         else:
-            print("The problem does not have an optimal solution.")
+            results['solved'] = False
 
-    def print_friendly_recipes(self):
-        recipe_data = defaultdict(dict)
-        for recipe_var in self.solver_recipes.values():
-            if(recipe_var.solution_value()>1e-9):
-                curr_recipe_data = parse_recipe_id(recipe_var.name())
-                curr_recipe_data['num_machines'] = recipe_var.solution_value()
-                curr_recipe_data['recipe_var'] = recipe_var
-                outer_key = curr_recipe_data['recipe_name']
-                inner_key = curr_recipe_data['recipe_quality']
-                recipe_data[outer_key][inner_key] = curr_recipe_data
-        for recipe_name, outer_value in recipe_data.items():
-            print(recipe_name)
-            for quality_name, recipe_data in outer_value.items():
-                print(f'    {quality_name}: {format_float(recipe_data["num_machines"])}')
-                print(f'        machine: {recipe_data["machine"]}')
-                print(f'        modules: {recipe_data["num_qual_modules"]}Q {recipe_data["num_prod_modules"]}P')
-                if int(recipe_data["num_beaconed_speed_modules"]) > 0:
-                    print(f'        beaconed speed modules: {recipe_data["num_beaconed_speed_modules"]}')
-                recipe_info = self.recipes[recipe_data['recipe_name']]
-                items_used = recipe_info['ingredients'] + recipe_info['results']
-                print('        ingredients:')
-                # horrible unreadable code below
-                for ingredient in recipe_info['ingredients']:
-                    item_name = ingredient['name']
-                    possible_items = [i for i in self.solver_items if i.endswith(f'__{item_name}')]
-                    for possible_item in possible_items:
-                        vars = self.solver_items[possible_item]
-                        for var in vars:
-                            if var['var'] is recipe_data['recipe_var'] and var['amount'] < 0:
-                                recipe_amount = var['amount']
-                                total_amount = (-1) * recipe_amount * recipe_data['num_machines']
-                                item_info = parse_item_id(possible_item)
-                                print(f'            {item_info["item_key"]} ({item_info["quality"]}): {format_float(total_amount)}')
-                print('        results:')
-                for result in recipe_info['results']:
-                    item_name = result['name']
-                    possible_items = [i for i in self.solver_items if i.endswith(f'__{item_name}')]
-                    for possible_item in possible_items:
-                        vars = self.solver_items[possible_item]
-                        for var in vars:
-                            if var['var'] is recipe_data['recipe_var'] and var['amount'] > 0:
-                                recipe_amount = var['amount']
-                                total_amount = recipe_amount * recipe_data['num_machines']
-                                item_info = parse_item_id(possible_item)
-                                print(f'            {item_info["item_key"]} ({item_info["quality"]}): {format_float(total_amount)}')
+        return results
 
+def print_results(results, data, verbose):
+    if not results['solved']:
+        print("The problem does not have an optimal solution.")
+        return
 
-    def print_machine_layout(self):
-        variants = defaultdict(list)
-        for recipe_var in self.solver_recipes.values():
-            if(recipe_var.solution_value()>1e-9):
-                data = parse_recipe_id(recipe_var.name())
-                data['solution_value'] = recipe_var.solution_value()
-                variants[data['recipe_name'], data['machine']].append(data)
+    # config file test examples don't have 'localized_name' entries, just display the key if 'localized_name' not present
+    item_names = {}
+    for item_data in data['items']:
+        item_names[item_data['key']] = item_data['localized_name']['en'].lower() if 'localized_name' in item_data else item_data['key']
 
-        print("Machine layout:")
+    recipe_names = {}
+    for recipe_data in data['recipes']:
+        recipe_names[recipe_data['key']] = recipe_data['localized_name']['en'].lower() if 'localized_name' in recipe_data else recipe_data['key']
 
-        for (name, machine), vars in variants.items():
-            try:
-                machine = self.items[machine]['localized_name']['en']
-                name = self.recipes[name]['localized_name']['en']
-            except KeyError:
-                pass
-            quals = []
-            for var in vars:
-                mods = ''
-                if int(var['num_qual_modules']):
-                    mods += f'{var["num_qual_modules"]}Q'
-                if int(var['num_prod_modules']):
-                    mods += f'{var["num_prod_modules"]}P'
-                if mods:
-                    mods = ' ' + mods
-                quals.append(f"{var['recipe_quality']}{mods}")
-            print(f'{name} in {machine}: {", ".join(quals)}')
-        print()
+    print("Solution:")
+    print(f"Objective value = {results['cost']}")
 
+    print('')
+    print(f"Buildings used: {results['num_buildings']}")
+    print(f"Modules used: {results['num_modules']}")
+
+    print('')
+    print('Inputs:')
+    for item_key, outer_value in results['inputs'].items():
+        for item_quality, amount in outer_value.items():
+            if item_key.endswith('--resource'):
+                game_item_key = item_key.split('--')[0]
+                item_description =  f'{item_names[game_item_key]} (resource)'
+            else:
+                item_description = f'{item_quality} {item_names[item_key]}'
+            print(f'{item_description}: {format_float(amount)}')
+
+    if 'byproducts' in results:
+        print('')
+        print('Byproducts:')
+        for item_key, outer_value in results['byproducts'].items():
+            for item_quality, amount in outer_value.items():
+                item_description = f'{item_quality} {item_names[item_key]}'
+                print(f'{item_description}: {format_float(amount)}')
+
+    print('')
+    print('Machine Layout:')
+    for recipe_key, outer_value in results['recipes'].items():
+        for recipe_quality, recipe_infos in outer_value.items():
+            for recipe_info in recipe_infos:
+                machine_key = recipe_info['machine']
+                # test examples don't have crafting machine name entries
+                machine_name = item_names[machine_key] if machine_key in item_names else machine_key
+                if recipe_key.endswith('--mining'):
+                    game_item_key = recipe_key.split('--')[0]
+                    recipe_description = f'{item_names[game_item_key]} mining'
+                else:
+                    recipe_description = f'{recipe_quality} {recipe_names[recipe_key]}'
+                description = []
+                q = recipe_info['num_qual_modules']
+                p = recipe_info['num_prod_modules']
+                bs = recipe_info['num_beaconed_speed_modules']
+                num_buildings = recipe_info['num_buildings']
+                if q > 0:
+                    description.append(f'{q}Q')
+                if p > 0:
+                    description.append(f'{p}P')
+                if bs > 0:
+                    description.append(f'{bs}BS')
+                description.extend([recipe_description, 'in', f'{machine_name}:', format_float(num_buildings)])
+                print(' '.join(description))
+                if verbose:
+                    print('    Ingredients:')
+                    for ingredient_item_id, ingredient_amount in recipe_info['ingredients'].items():
+                        ingredient_item_info = parse_item_id(ingredient_item_id)
+                        ingredient_name = item_names[ingredient_item_info['item_key']]
+                        print(f"        {ingredient_item_info['quality']} {ingredient_name}: {format_float(ingredient_amount)}")
+                    print('    Products:')
+                    for product_item_id, product_amount in recipe_info['products'].items():
+                        product_item_info = parse_item_id(product_item_id)
+                        product_name = item_names[product_item_info['item_key']]
+                        print(f"        {product_item_info['quality']} {product_name}: {format_float(product_amount)}")
+
+def output_to_csv(results, data, output_csv):
+    item_names = { item_data['key']: item_data['localized_name']['en'].lower() for item_data in data['items']}
+    recipe_names = { recipe_data['key']: recipe_data['localized_name']['en'].lower() for recipe_data in data['recipes']}
+    print('')
+    print(f'Writing output to: {output_csv}')
+    recipe_data = []
+    for recipe_key, outer_value in results['recipes'].items():
+        for recipe_quality, recipe_infos in outer_value.items():
+            for recipe_info in recipe_infos:
+                curr_recipe_data = {
+                    'recipe_name': recipe_names[recipe_key],
+                    'recipe_quality': recipe_quality,
+                    'machine': item_names[recipe_info['machine']],
+                    'num_qual_modules': recipe_info['num_qual_modules'],
+                    'num_prod_modules': recipe_info['num_prod_modules'],
+                    'num_beaconed_speed_modules': recipe_info['num_beaconed_speed_modules'],
+                    'num_buildings': recipe_info['num_buildings'],
+                }
+                recipe_data.append(curr_recipe_data)
+    df = pd.DataFrame(columns=['recipe_name', 'recipe_quality', 'machine', 'num_qual_modules', 'num_prod_modules', 'num_beaconed_speed_modules', 'num_buildings'], data=recipe_data)
+    df.to_csv(output_csv, index=False)
+
+# shared by factorio_solver and linear_solver __main__ threads
+def run_solver_from_command_line(config, data, verbose=False, output_csv=None, output_flow_chart=None):
+    solver = LinearSolver(config=config, data=data)
+    results = solver.run()
+
+    print_results(results, data, verbose)
+
+    if output_csv is not None:
+        output_to_csv(results, data, output_csv)
+
+    if output_flow_chart is not None:
+        fc.FlowChartGenerator(solver.solver_recipes, solver.recipes, solver.items, verbose).write_flow_chart(output_flow_chart)
 
 def main():
     codebase_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -645,25 +718,19 @@ def main():
         prog='Linear Solver',
         description='This program optimizes prod/qual ratios in factories in order to minimize inputs needed for a given output',
     )
-    parser.add_argument('-c', '--config', type=str, default=default_config_path,
-                        help='Config file. Defaults to \'examples/one_step_example.json\'.')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Verbose mode. Prints input and output amounts for each solved recipe.')
-    parser.add_argument('-o', '--output', type=str,
-                        default=None, help='Output file')
-    parser.add_argument('-of', '--output-flow-chart', type=str, default=None,
-                        help='Output file for flow chart (.html)')
+    parser.add_argument('-c', '--config', type=str, default=default_config_path, help='Config file. Defaults to \'examples/one_step_example.json\'.')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode. Prints input and output amounts for each solved recipe.')
+    parser.add_argument('-o', '--output-csv', type=str, default=None, help='Output recipes to csv file')
+    parser.add_argument('-of', '--output-flow-chart', type=str, default=None, help='Output recipes to flow chart html file')
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        config = json.load(f)
+    with open(args.config) as config_file:
+        config = json.load(config_file)
 
-    solver = LinearSolver(
-        config=config,
-        output_filename=args.output,
-        output_flow_chart=args.output_flow_chart,
-        verbose=args.verbose)
-    solver.run()
+    with open(config['data']) as data_file:
+        data = json.load(data_file)
+
+    run_solver_from_command_line(config, data, args.verbose, args.output_csv, args.output_flow_chart)
 
 if __name__=='__main__':
     main()

@@ -1,0 +1,34 @@
+{% macro quality_select(name) -%}
+<select name="{{ name }}">
+  <option value="normal">normal</option>
+  <option value="uncommon">uncommon</option>
+  <option value="rare">rare</option>
+  <option value="epic">epic</option>
+  <option value="legendary" selected="selected">legendary</option>
+</select>
+{%- endmacro %}
+
+{% macro quality_select_normal_default(name) -%}
+<select name="{{ name }}">
+  <option value="normal" selected="selected">normal</option>
+  <option value="uncommon">uncommon</option>
+  <option value="rare">rare</option>
+  <option value="epic">epic</option>
+  <option value="legendary">legendary</option>
+</select>
+{%- endmacro %}
+
+{% macro module_tier_select(name) -%}
+<select name="{{ name }}">
+  <option value="1">1</option>
+  <option value="2">2</option>
+  <option value="3" selected="selected">3</option>
+</select>
+{%- endmacro %}
+
+{% macro list_type_select(name) -%}
+<select name="{{ name }}">
+  <option value="allowed">Allowed</option>
+  <option value="disallowed">Disallowed</option>
+</select>
+{%- endmacro %}

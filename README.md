@@ -16,7 +16,7 @@ For instance, we can craft legendary outputs from normal inputs using t3 legenda
 For an output-amount of 0.5 gears from iron plates (accounting for 2 gears per plate), we get 79.9 normal inputs per legendary output using 2 prod/2 qual at each stage, a result that's familiar for those who have looked into quality loops:
 
 ```
-python ./scripts/factorio_solver.py --input-items iron-plate=1 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --allowed-recipes iron-gear-wheel iron-gear-wheel-recycling --module-cost 0
+python ./solver/factorio_solver.py --input-items iron-plate=1 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --allowed-recipes iron-gear-wheel iron-gear-wheel-recycling --module-cost 0
 Solving...
 
 Solution:
@@ -45,7 +45,7 @@ What if instead of optimizing output per input, we optimized for fewest modules 
 We can answer this question by changing the cost function, specifically by setting the cost of modules to 1 and the cost of resources to 0:
 
 ```
-python ./scripts/factorio_solver.py --input-items iron-plate=0 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --allowed-recipes iron-gear-wheel iron-gear-wheel-recycling --module-cost 1
+python ./solver/factorio_solver.py --input-items iron-plate=0 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --allowed-recipes iron-gear-wheel iron-gear-wheel-recycling --module-cost 1
 Solving...
 
 Solution:
@@ -79,7 +79,7 @@ It is your responsibility to understand the cost function and how to set it for 
 Incidentally, if we allow every recipe in the game, the best way to make legendary gears from normal plates uses underground transport belts!
 This is true even when optimizing purely for outputs/input.
 ```
-python ./scripts/factorio_solver.py --input-items iron-plate=1 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --module-cost 0
+python ./solver/factorio_solver.py --input-items iron-plate=1 --output-item iron-gear-wheel --output-amount 0.5 --input-resources --module-cost 0
 Solving...
 
 Solution:
@@ -114,9 +114,24 @@ legendary__underground-belt-recycling__recycler__0-qual__0-prod: 0.0009350789952
 
 Speculating here, but this could be because the legendary t3 the probability is weighted more for one quality jump (24%) than for skipping qualities (10%) and therefore wants as many "one-quality-jump" opportunities as possible, which means having more production stages.
 
+## Web App
+
+Currently this app being updated to have a web-based UI that uses localhost web servers.
+The final result will likely involve two servers, a back-end API that uses Flask, and a front-end that uses React.
+At the moment there is only a Flask server.
+To run, use the following command:
+
+`flask --app ./backend/flask_app.py run --debug`
+
+After launching, open `127.0.0.1:5000` in a browser, or the url displayed by Flask if different.
+
+Currently it's a very basic UI with no css, and is more of a proof-of-concept than a final version.
+
+Note that if you have a web development background and are interested in improving the Flask-based UI, I'll most likely accept improvements, but note that any work on the Flask side might become irrelevant if I implement a separate front-end.
+
 ## Overview of the Scripts
 
-There are four scripts in the `scripts` folder:
+There are four scripts in the `solver` folder:
 - `factorio_solver.py` is a the main user-facing script, and is a convenience wrapper to `linear_solve.py` with many configurable command line arguments.
 - `linear_solver.py` contains the actually solving logic, and can be run directly with your own config file if you want more customization.
 - `one_step_matrix_solver.py`, was the first script written and is kept for legacy purposes.
@@ -124,7 +139,7 @@ There are four scripts in the `scripts` folder:
 
 ### Factorio Solver
 
-To see a full list of command line args, we can run `python ./scripts/factorio_solver.py --help`:
+To see a full list of command line args, we can run `python ./solver/factorio_solver.py --help`:
 
 ```
 usage: Factorio Solver [-h] [-oi OUTPUT_ITEM] [-oa OUTPUT_AMOUNT] [-oq OUTPUT_QUALITY] [-pt PROD_MODULE_TIER] [-qt QUALITY_MODULE_TIER] [-s] [-st SPEED_MODULE_TIER] [-q MODULE_QUALITY]
@@ -198,7 +213,7 @@ options:
 ### Linear Solver
 
 The linear solver can be run using any of the example config files, or you can write your own by copying one.
-We can run the electronic_circuits example using `python ./scripts/linear_solver.py --config ./examples/electronic_circuits.json`:
+We can run the electronic_circuits example using `python ./solver/linear_solver.py --config ./examples/electronic_circuits.json`:
 
 ```
 Solving...
