@@ -74,4 +74,9 @@ def index_post(): # run solver using post params
 
     solver = ls.LinearSolver(config=config, data=fs.FACTORIO_DATA)
     results = solver.run()
-    return render_template('results.html', results=results)
+    if request.args['return'] == 'json':
+        return results
+    elif request.args['return'] == 'html':
+        return render_template('results.html', results=results)
+    else:
+        raise ValueError('Bad return type')
