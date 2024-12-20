@@ -126,10 +126,10 @@ def get_resource_recipe_key(item_key):
     return f'{item_key}--mining'
 
 def parse_item_id(item_id):
-    objs = item_id.split('__')
+    item_quality, item_key = item_id.split('__')
     return {
-        'item_key': objs[1],
-        'quality': objs[0]
+        'item_key': item_key,
+        'item_quality': item_quality,
     }
 
 def get_item_id(item_key, quality):
@@ -139,20 +139,20 @@ def get_input_id(item_id):
     return f'input__{item_id}'
 
 def parse_input_id(input_id):
-    _, quality_name, item_key = input_id.split('__')
+    _, item_quality, item_key = input_id.split('__')
     return {
         'item_key': item_key,
-        'quality_name': quality_name
+        'item_quality': item_quality,
     }
 
 def get_byproduct_id(item_id):
     return f'byproduct__{item_id}'
 
 def parse_byproduct_id(byproduct_id):
-    _, quality_name, item_key = byproduct_id.split('__')
+    _, item_quality, item_key = byproduct_id.split('__')
     return {
         'item_key': item_key,
-        'quality_name': quality_name
+        'item_quality': item_quality,
     }
 
 def get_output_id(item_id):
@@ -536,27 +536,38 @@ class LinearSolver:
             results['num_buildings'] = self.num_buildings_var.solution_value()
             results['num_modules'] = self.num_modules_var.solution_value()
 
-            results['inputs'] = defaultdict(dict)
+            results['input_items'] = defaultdict(dict)
+            results['input_resources'] = {}
             for input_var in self.solver_inputs.values():
                 if input_var.solution_value() > 1e-9:
                     input_info = parse_input_id(input_var.name())
-                    results['inputs'][input_info['item_key']][input_info['quality_name']] = input_var.solution_value()
+                    raw_item_key = input_info['item_key']
+                    if raw_item_key.endswith('--resource'):
+                        factorio_item_key = raw_item_key.split('--')[0]
+                        results['input_resources'][factorio_item_key] = input_var.solution_value()
+                    else:
+                        factorio_item_key = raw_item_key
+                        results['input_items'][factorio_item_key][input_info['item_quality']] = input_var.solution_value()
 
             if self.allow_byproducts:
                 results['byproducts'] = defaultdict(dict)
                 for byproduct_var in self.solver_byproducts.values():
                     if byproduct_var.solution_value() > 1e-9:
                         byproduct_info = parse_byproduct_id(byproduct_var.name())
-                        results['byproducts'][byproduct_info['item_key']][byproduct_info['quality_name']] = byproduct_var.solution_value()
+                        results['byproducts'][byproduct_info['item_key']][byproduct_info['item_quality']] = byproduct_var.solution_value()
 
-            results['recipes'] = defaultdict(lambda: defaultdict(list))
+            results['mining_recipes'] = defaultdict(list)
+            results['crafting_recipes'] = defaultdict(lambda: defaultdict(list))
             for recipe_var in self.solver_recipes.values():
                 if(recipe_var.solution_value()>1e-9):
                     recipe_info = parse_recipe_id(recipe_var.name())
-                    recipe_key = recipe_info['recipe_key']
+                    raw_recipe_key = recipe_info['recipe_key']
                     num_buildings = recipe_var.solution_value()
 
-                    recipe_metadata = self.recipes[recipe_key]
+                    if raw_recipe_key.endswith('--mining'):
+                        factorio_recipe_key = raw_recipe_key.split('--')[0]
+                    else:
+                        factorio_recipe_key = raw_recipe_key
 
                     # this part is tricky so I'll add a detailed explanation below
                     # recall the definition of self.solver_items:
@@ -569,28 +580,53 @@ class LinearSolver:
                     #   - loop over everything in self.solver_items
                     #   - check if any of its associated variables match the current recipe_var
                     #   - if so, multiply its amount by the recipe's solved num_buildings and add it to the ingredients/products entry
-                    ingredients = {}
-                    products = {}
+                    resource_consumption = None
+                    ingredients = defaultdict(dict)
+                    products = defaultdict(dict)
                     for item_id, solver_var_infos in self.solver_items.items():
+                        item_info = parse_item_id(item_id)
+                        raw_item_key = item_info['item_key']
+                        if raw_item_key.endswith('--resource'):
+                            factorio_item_key = raw_item_key.split('--')[0]
+                        else:
+                            factorio_item_key = raw_item_key
                         for solver_var_info in solver_var_infos:
                             if recipe_var is solver_var_info['var']:
                                 amount_per_recipe = solver_var_info['amount']
                                 total_amount = amount_per_recipe * num_buildings
                                 # note that total_amount can equal zero in some cases (i.e. in quality recipe with no quality modules)
                                 if total_amount < 0:
-                                    ingredients[item_id] = (-1) * total_amount
+                                    if raw_recipe_key.endswith('--mining'):
+                                        if factorio_item_key == factorio_recipe_key:
+                                            resource_consumption = (-1) * amount
+                                        else:
+                                            ingredients[factorio_item_key] = (-1) * total_amount
+                                    else:
+                                        ingredients[factorio_item_key][item_info['item_quality']] = (-1) * total_amount
                                 elif total_amount > 0:
-                                    products[item_id] = total_amount
+                                    products[item_info['item_key']][item_info['item_quality']] = total_amount
 
-                    results['recipes'][recipe_info['recipe_key']][recipe_info['recipe_quality']].append({
-                        'num_buildings': recipe_var.solution_value(),
-                        'machine': recipe_info['machine'],
-                        'num_prod_modules': recipe_info['num_prod_modules'],
-                        'num_qual_modules': recipe_info['num_qual_modules'],
-                        'num_beaconed_speed_modules': recipe_info['num_beaconed_speed_modules'],
-                        'ingredients': ingredients,
-                        'products': products
-                    })
+                    if raw_recipe_key.endswith('--mining'):
+                        results['mining_recipes'][factorio_recipe_key].append({
+                            'num_buildings': recipe_var.solution_value(),
+                            'machine': recipe_info['machine'],
+                            'num_prod_modules': recipe_info['num_prod_modules'],
+                            'num_qual_modules': recipe_info['num_qual_modules'],
+                            'num_beaconed_speed_modules': recipe_info['num_beaconed_speed_modules'],
+                            'resource_consumption': resource_consumption,
+                            'ingredients': ingredients,
+                            'products': products
+                        })
+                    else:
+                        results['crafting_recipes'][factorio_recipe_key][recipe_info['recipe_quality']].append({
+                            'num_buildings': recipe_var.solution_value(),
+                            'machine': recipe_info['machine'],
+                            'num_prod_modules': recipe_info['num_prod_modules'],
+                            'num_qual_modules': recipe_info['num_qual_modules'],
+                            'num_beaconed_speed_modules': recipe_info['num_beaconed_speed_modules'],
+                            'ingredients': ingredients,
+                            'products': products
+                        })
 
         else:
             results['solved'] = False
@@ -619,37 +655,67 @@ def print_results(results, data, verbose):
     print(f"Modules used: {results['num_modules']}")
 
     print('')
-    print('Inputs:')
-    for item_key, outer_value in results['inputs'].items():
+    print('Input Resources:')
+    for item_key, amount in results['input_resources'].items():
+        print(f'{item_key} (resource): {format_float(amount)}')
+
+    print('Input Items:')
+    for item_key, outer_value in results['input_items'].items():
         for item_quality, amount in outer_value.items():
-            if item_key.endswith('--resource'):
-                game_item_key = item_key.split('--')[0]
-                item_description =  f'{item_names[game_item_key]} (resource)'
-            else:
-                item_description = f'{item_quality} {item_names[item_key]}'
-            print(f'{item_description}: {format_float(amount)}')
+            print(f'{item_quality} {item_key}: {format_float(amount)}')
 
     if 'byproducts' in results:
         print('')
         print('Byproducts:')
         for item_key, outer_value in results['byproducts'].items():
             for item_quality, amount in outer_value.items():
-                item_description = f'{item_quality} {item_names[item_key]}'
-                print(f'{item_description}: {format_float(amount)}')
+                print(f'{item_quality} {item_key}: {format_float(amount)}')
 
     print('')
-    print('Machine Layout:')
-    for recipe_key, outer_value in results['recipes'].items():
+    print('Mining Recipes:')
+    import pprint
+    pprint.pprint(results['mining_recipes'])
+    for recipe_key, recipe_infos in results['mining_recipes'].items():
+        for recipe_info in recipe_infos:
+            machine_key = recipe_info['machine']
+            # test examples don't have crafting machine name entries
+            machine_name = item_names[machine_key] if machine_key in item_names else machine_key
+            description = []
+            q = recipe_info['num_qual_modules']
+            p = recipe_info['num_prod_modules']
+            bs = recipe_info['num_beaconed_speed_modules']
+            num_buildings = recipe_info['num_buildings']
+            resource_consumption = recipe_info['resource_consumption']
+            if q > 0:
+                description.append(f'{q}Q')
+            if p > 0:
+                description.append(f'{p}P')
+            if bs > 0:
+                description.append(f'{bs}BS')
+            description.extend([item_names[recipe_key], 'mining', 'in', f'{machine_name}:', format_float(num_buildings)])
+            print(' '.join(description))
+            if verbose:
+                print(f'Resource Consumption: {format_float(resource_consumption)}')
+                print('    Ingredients:')
+                for ingredient_item_key, ingredient_infos in recipe_info['ingredients'].items():
+                    for ingredient_item_quality, ingredient_amount in ingredient_infos.items():
+                        ingredient_name = item_names[ingredient_item_key]
+                        print(f"        {ingredient_item_quality} {ingredient_item_key}: {format_float(ingredient_amount)}")
+                print('    Products:')
+                for product_item_key, product_infos in recipe_info['products'].items():
+                    for product_item_quality, product_amount in product_infos.items():
+                        product_name = item_names[product_item_key]
+                        print(f"        {product_item_quality} {product_item_key}: {format_float(product_amount)}")
+
+
+    print('')
+    print('Crafting Recipes:')
+    for recipe_key, outer_value in results['crafting_recipes'].items():
         for recipe_quality, recipe_infos in outer_value.items():
             for recipe_info in recipe_infos:
                 machine_key = recipe_info['machine']
                 # test examples don't have crafting machine name entries
                 machine_name = item_names[machine_key] if machine_key in item_names else machine_key
-                if recipe_key.endswith('--mining'):
-                    game_item_key = recipe_key.split('--')[0]
-                    recipe_description = f'{item_names[game_item_key]} mining'
-                else:
-                    recipe_description = f'{recipe_quality} {recipe_names[recipe_key]}'
                 description = []
                 q = recipe_info['num_qual_modules']
                 p = recipe_info['num_prod_modules']
@@ -661,27 +727,27 @@ def print_results(results, data, verbose):
                     description.append(f'{p}P')
                 if bs > 0:
                     description.append(f'{bs}BS')
-                description.extend([recipe_description, 'in', f'{machine_name}:', format_float(num_buildings)])
+                description.extend([recipe_quality, recipe_names[recipe_key], 'in', f'{machine_name}:', format_float(num_buildings)])
                 print(' '.join(description))
                 if verbose:
                     print('    Ingredients:')
-                    for ingredient_item_id, ingredient_amount in recipe_info['ingredients'].items():
-                        ingredient_item_info = parse_item_id(ingredient_item_id)
-                        ingredient_name = item_names[ingredient_item_info['item_key']]
-                        print(f"        {ingredient_item_info['quality']} {ingredient_name}: {format_float(ingredient_amount)}")
+                    for ingredient_item_key, ingredient_infos in recipe_info['ingredients'].items():
+                        for ingredient_item_quality, ingredient_amount in ingredient_infos.items():
+                            ingredient_name = item_names[ingredient_item_key]
+                            print(f"        {ingredient_item_quality} {ingredient_item_key}: {format_float(ingredient_amount)}")
                     print('    Products:')
-                    for product_item_id, product_amount in recipe_info['products'].items():
-                        product_item_info = parse_item_id(product_item_id)
-                        product_name = item_names[product_item_info['item_key']]
-                        print(f"        {product_item_info['quality']} {product_name}: {format_float(product_amount)}")
+                    for product_item_key, product_infos in recipe_info['products'].items():
+                        for product_item_quality, product_amount in product_infos.items():
+                            product_name = item_names[product_item_key]
+                            print(f"        {product_item_quality} {product_item_key}: {format_float(product_amount)}")
 
 def output_to_csv(results, data, output_csv):
     item_names = { item_data['key']: item_data['localized_name']['en'].lower() for item_data in data['items']}
     recipe_names = { recipe_data['key']: recipe_data['localized_name']['en'].lower() for recipe_data in data['recipes']}
     print('')
-    print(f'Writing output to: {output_csv}')
+    print(f'Writing crafting recipes to: {output_csv}')
     recipe_data = []
-    for recipe_key, outer_value in results['recipes'].items():
+    for recipe_key, outer_value in results['crafting_recipes'].items():
         for recipe_quality, recipe_infos in outer_value.items():
             for recipe_info in recipe_infos:
                 curr_recipe_data = {
